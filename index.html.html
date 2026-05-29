@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Moneda del Mundo — Señales de Mercado (Auto-refresh)</title>
+
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+
+<!-- Libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+  /* (Mismos estilos que antes, no cambian) */
+  :root {
+    --navy:    #0d1f3c;
+    --navy2:   #152845;
+    --blue:    #1a6bff;
+    --blue2:   #4b8fff;
+    --gold:    #f0a500;
+    --bg:      #f2f4f8;
+    --surface: #ffffff;
+    --border:  #dde2ee;
+    --text1:   #0d1f3c;
+    --text2:   #5a6a8a;
+    --text3:   #8a96b0;
+    --green:   #1a7a4a;
+    --green-bg:#e2f5ec;
+    --red:     #c0222a;
+    --red-bg:  #fde8e9;
+    --amber:   #b06000;
+    --amber-bg:#fff0d6;
+    --font-display: 'Syne', sans-serif;
+    --font-body:    'DM Sans', sans-serif;
+    --font-mono:    'DM Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-body);
+    background: var(--bg);
+    color: var(--text1);
+    min-height: 100vh;
+  }
+
+  .topbar {
+    background: var(--navy);
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 58px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.18);
+  }
+  .topbar-brand { display: flex; align-items: center; gap: 12px; }
+  .topbar-logo {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    background: var(--blue);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 14px;
+    color: white;
+  }
+  .topbar-name { font-family: var(--font-display); font-size: 16px; font-weight: 700; color: white; }
+  .topbar-sub { font-size: 11px; color: rgba(255,255,255,0.45); margin-top: 1px; }
+  .topbar-actions { display: flex; gap: 8px; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px; padding: 8px 16px; border-radius: 8px;
+    font-size: 13px; font-family: var(--font-body); font-weight: 500; cursor: pointer;
+    border: none; transition: all 0.15s;
+  }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary { background: var(--blue); color: white; }
+  .btn-primary:hover:not(:disabled) { background: #0d5ee0; }
+  .btn-ghost { background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); }
+  .btn-ghost:hover:not(:disabled) { background: rgba(255,255,255,0.18); }
+  .btn-outline { background: var(--surface); color: var(--text1); border: 1px solid var(--border); }
+  .btn-outline:hover:not(:disabled) { background: var(--bg); }
+  .btn-auto { background: var(--gold); color: #0d1f3c; border: none; }
+  .btn-auto.on { background: #2a7f2a; color: white; }
+  .main { max-width: 1100px; margin: 0 auto; padding: 1.75rem 1.5rem 4rem; }
+  .status-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 16px; margin-bottom: 1.25rem; font-size: 13px;
+  }
+  .status-left { display: flex; align-items: center; gap: 10px; }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: #aaa; flex-shrink: 0;
+  }
+  .status-dot.idle    { background: #aaa; }
+  .status-dot.loading { background: var(--gold); animation: pulse 0.7s infinite; }
+  .status-dot.ok      { background: var(--green); }
+  .status-dot.error   { background: var(--red); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.25} }
+  .status-text { color: var(--text2); }
+  .status-time { font-family: var(--font-mono); font-size: 12px; color: var(--text3); }
+  .progress { height: 3px; background: var(--border); border-radius: 2px; margin-bottom: 1.25rem; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--blue); border-radius: 2px; transition: width 0.25s ease; }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1.25rem; align-items: center; }
+  .filter-btn {
+    padding: 5px 13px; border-radius: 99px; font-size: 12px; font-weight: 500; cursor: pointer;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text2);
+  }
+  .filter-btn.active { background: var(--navy); color: white; border-color: var(--navy); }
+  .section-heading {
+    font-family: var(--font-display); font-size: 12px; font-weight: 700; color: var(--text3);
+    text-transform: uppercase; letter-spacing: 1.5px; padding: 10px 14px 8px; background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .tbl-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 1.25rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: var(--navy); }
+  th { padding: 10px 14px; text-align: left; font-weight: 600; font-size: 11px; color: rgba(255,255,255,0.7); letter-spacing: 0.6px; text-transform: uppercase; }
+  td { padding: 11px 14px; border-bottom: 1px solid var(--border); color: var(--text1); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: #f6f8fc; }
+  .asset-name { font-weight: 600; font-size: 13px; }
+  .asset-sym  { font-family: var(--font-mono); font-size: 11.5px; color: var(--text3); }
+  .price-val  { font-family: var(--font-mono); font-weight: 500; }
+  .change-val { font-family: var(--font-mono); font-weight: 600; font-size: 12px; }
+  .chg-up { color: var(--green); }
+  .chg-dn { color: var(--red); }
+  .chg-fl { color: var(--text3); }
+  .tp-val { font-family: var(--font-mono); font-size: 12px; color: var(--text2); }
+  .sig {
+    display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 6px;
+    font-size: 11.5px; font-weight: 600; white-space: nowrap;
+  }
+  .sig-cf { background: #d4edbb; color: #1a5e0d; }
+  .sig-c  { background: #c8f0e3; color: #0a4e38; }
+  .sig-n  { background: #e8eaf0; color: #4a5570; }
+  .sig-v  { background: #fde3d5; color: #8a2010; }
+  .sig-vf { background: #fcd5d5; color: #7a1515; }
+  .sig-na { background: #f0f0f0; color: #999; }
+  .skel { height: 14px; border-radius: 4px; background: linear-gradient(90deg, #eee 25%, #f5f5f5 50%, #eee 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
+  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+  .export-bar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 1.25rem; align-items: center; }
+  .summary-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 1.25rem; }
+  .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .summary-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 4px; }
+  .summary-val { font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--text1); }
+  .summary-val.green { color: var(--green); }
+  .summary-val.red   { color: var(--red); }
+  .summary-val.amber { color: var(--amber); }
+  .auto-badge { background: #2c3e66; border-radius: 20px; padding: 4px 12px; font-size: 11px; color: white; margin-left: 10px; }
+
+  /* Printable */
+  #printable-report { position: fixed; left: -9999px; top: 0; width: 800px; background: white; font-family: 'DM Sans', Arial, sans-serif; }
+  .pr-header { background: linear-gradient(135deg, #0d1f3c 0%, #1a3a70 60%, #1a6bff 100%); padding: 28px 36px 22px; display: flex; align-items: center; gap: 18px; }
+  .pr-logo { width: 58px; height: 58px; border-radius: 50%; background: white; display: flex; align-items: center; justify-content: center; }
+  .pr-brand h1 { font-family: 'Syne'; font-size: 26px; font-weight: 800; color: white; margin: 0 0 3px; }
+  .pr-brand p { font-size: 12px; color: rgba(255,255,255,0.7); }
+  .pr-titlebar { background: #f0f4fb; border-bottom: 2px solid #c8d4e8; padding: 14px 36px; text-align: center; }
+  .pr-titlebar h2 { font-size: 17px; font-weight: 700; color: #0d1f3c; }
+  .pr-body { padding: 20px 36px; }
+  .pr-section-title { font-family: 'Syne'; font-size: 12px; font-weight: 700; color: #0d1f3c; text-transform: uppercase; margin: 18px 0 8px; border-bottom: 2px solid #c8d4e8; }
+  .pr-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .pr-table th { background: #0d1f3c; color: white; padding: 8px 12px; text-align: left; font-size: 11px; }
+  .pr-table td { padding: 8px 12px; border-bottom: 1px solid #eaeff8; }
+  .pr-sig { display: inline-block; padding: 3px 10px; border-radius: 5px; font-size: 11px; font-weight: 700; }
+  .pr-cf { background: #d4edbb; color: #1a5e0d; }
+  .pr-c  { background: #c8f0e3; color: #0a4e38; }
+  .pr-n  { background: #e8eaf0; color: #4a5570; }
+  .pr-v  { background: #fde3d5; color: #8a2010; }
+  .pr-vf { background: #fcd5d5; color: #7a1515; }
+  .pr-footer { background: #f0f4fb; border-top: 1px solid #c8d4e8; padding: 13px 36px; display: flex; justify-content: space-between; font-size: 11px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div id="printable-report"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+
+// -------------------- ASSETS --------------------
+const ALL_ASSETS = [
+  { name:'NVIDIA',   sym:'NVDA',     cat:'acciones' },
+  { name:'META',     sym:'META',     cat:'acciones' },
+  { name:'GOOGLE',   sym:'GOOGL',    cat:'acciones' },
+  { name:'NETFLIX',  sym:'NFLX',     cat:'acciones' },
+  { name:'MSFT',     sym:'MSFT',     cat:'acciones' },
+  { name:'APPLE',    sym:'AAPL',     cat:'acciones' },
+  { name:'AMAZON',   sym:'AMZN',     cat:'acciones' },
+  { name:'AMD',      sym:'AMD',      cat:'acciones' },
+  { name:'ARM',      sym:'ARM',      cat:'acciones' },
+  { name:'TSM',      sym:'TSM',      cat:'acciones' },
+  { name:'Exxon',    sym:'XOM',      cat:'acciones' },
+  { name:'Shell',    sym:'SHEL',     cat:'acciones' },
+  { name:'Chevron',  sym:'CVX',      cat:'acciones' },
+  { name:'YPF',      sym:'YPF',      cat:'acciones' },
+  { name:'MELI',     sym:'MELI',     cat:'acciones' },
+  { name:'Strategy', sym:'MSTR',     cat:'acciones' },
+  { name:'NASDAQ',   sym:'^IXIC',    cat:'indices'  },
+  { name:'S&P 500',  sym:'^GSPC',    cat:'indices'  },
+  { name:'VIX',      sym:'^VIX',     cat:'indices'  },
+  { name:'EUR/USD',  sym:'EURUSD=X', cat:'divisas'  },
+  { name:'GBP/USD',  sym:'GBPUSD=X', cat:'divisas'  },
+  { name:'USD/CHF',  sym:'USDCHF=X', cat:'divisas'  },
+  { name:'USD/CAD',  sym:'USDCAD=X', cat:'divisas'  },
+  { name:'Oro',      sym:'GC=F',     cat:'materias' },
+  { name:'Plata',    sym:'SI=F',     cat:'materias' },
+  { name:'WTI',      sym:'CL=F',     cat:'materias' },
+];
+
+// -------------------- FUNCIONES DE SEÑAL --------------------
+function computeSignal(ch) {
+  if (ch == null) return null;
+  if (ch >  1.5) return 'COMPRA FUERTE';
+  if (ch >  0.4) return 'COMPRA';
+  if (ch < -1.5) return 'VENTA FUERTE';
+  if (ch < -0.4) return 'VENTA';
+  return 'NEUTRAL';
+}
+function computeTP(price, sig, cat) {
+  if (!price || !sig || sig === 'NEUTRAL') return null;
+  const m = cat === 'divisas' ? 0.003 : cat === 'materias' ? 0.006 : 0.012;
+  if (sig === 'COMPRA FUERTE') return price * (1 + m * 1.5);
+  if (sig === 'COMPRA')        return price * (1 + m);
+  if (sig === 'VENTA FUERTE')  return price * (1 - m * 1.5);
+  if (sig === 'VENTA')         return price * (1 - m);
+  return null;
+}
+function fmtPrice(n, cat) {
+  if (n == null) return '—';
+  const dec = cat === 'divisas' ? 4 : 2;
+  return n.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+function SigBadge({ sig }) {
+  if (!sig) return <span className="sig sig-na">— sin datos</span>;
+  const map = {
+    'COMPRA FUERTE': ['sig-cf','▲▲'],
+    'COMPRA':        ['sig-c', '▲'],
+    'NEUTRAL':       ['sig-n', '→'],
+    'VENTA':         ['sig-v', '▼'],
+    'VENTA FUERTE':  ['sig-vf','▼▼'],
+  };
+  const [cls, icon] = map[sig] || ['sig-na','?'];
+  return <span className={`sig ${cls}`}>{icon} {sig}</span>;
+}
+
+// -------------------- NUEVO FETCH ROBUSTO --------------------
+// Lista ampliada de proxies (muchos más, con prioridad a los que suelen funcionar)
+const PROXY_LIST = [
+  // Los más fiables hoy en día
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  url => `https://cors-anywhere.herokuapp.com/${url}`,
+  url => `https://proxy.cors.sh/${url}`,
+  url => `https://thingproxy.freeboard.io/fetch/${url}`,
+];
+
+// Función para obtener datos de Yahoo Finance (con reintentos)
+async function fetchYahooQuotes(symbols) {
+  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols}`;
+  
+  for (let i = 0; i < PROXY_LIST.length; i++) {
+    const proxyFn = PROXY_LIST[i];
+    const proxyUrl = proxyFn(url);
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const response = await fetch(proxyUrl, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Origin': window.location.origin,
+        }
+      });
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) continue;
+      const data = await response.json();
+      
+      // Validar estructura
+      if (data?.quoteResponse?.result && data.quoteResponse.result.length > 0) {
+        const map = new Map();
+        for (const item of data.quoteResponse.result) {
+          const price = item.regularMarketPrice;
+          const prevClose = item.regularMarketPreviousClose;
+          if (price && prevClose && prevClose > 0) {
+            const change = ((price - prevClose) / prevClose) * 100;
+            map.set(item.symbol, { price, change: parseFloat(change.toFixed(2)) });
+          }
+        }
+        if (map.size > 0) return map;
+      }
+    } catch (err) {
+      console.warn(`Proxy ${i+1} falló:`, err.message);
+    }
+  }
+  return null; // Todos fallaron
+}
+
+// -------------------- COMPONENTE PRINCIPAL --------------------
+function App() {
+  const [assets, setAssets] = useState(() => 
+    ALL_ASSETS.map(a => ({ ...a, price: null, change: null, signal: null, tp: null, loading: false }))
+  );
+  const [status, setStatus] = useState({ state: 'idle', text: 'Listo — se actualizará cada 5 minutos', time: '' });
+  const [progress, setProgress] = useState(0);
+  const [filterCat, setFilterCat] = useState('all');
+  const [exporting, setExporting] = useState('');
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [countdown, setCountdown] = useState(300);
+  const intervalRef = useRef(null);
+  const countdownRef = useRef(null);
+
+  const catLabel = { acciones:'ACCIONES', indices:'ÍNDICES', divisas:'PARES DE DIVISAS', materias:'MATERIAS PRIMAS' };
+
+  const refreshData = useCallback(async () => {
+    setStatus({ state: 'loading', text: 'Conectando con Yahoo Finance...', time: '' });
+    setProgress(20);
+    
+    // Poner loading (pero mantener datos antiguos)
+    setAssets(prev => prev.map(a => ({ ...a, loading: true })));
+    
+    const symbolsStr = ALL_ASSETS.map(a => a.sym).join(',');
+    const quoteMap = await fetchYahooQuotes(symbolsStr);
+    
+    if (!quoteMap) {
+      setStatus({ 
+        state: 'error', 
+        text: '✗ No se pudieron obtener precios. Verifica tu conexión o recarga la página.', 
+        time: new Date().toLocaleTimeString('es-DO') 
+      });
+      setAssets(prev => prev.map(a => ({ ...a, loading: false })));
+      setProgress(0);
+      return;
+    }
+    
+    const updated = ALL_ASSETS.map(asset => {
+      const quote = quoteMap.get(asset.sym);
+      const price = quote?.price ?? null;
+      const change = quote?.change ?? null;
+      const signal = change != null ? computeSignal(change) : null;
+      const tp = (price && signal) ? computeTP(price, signal, asset.cat) : null;
+      return {
+        ...asset,
+        price,
+        change,
+        signal,
+        tp: tp ? parseFloat(tp.toFixed(asset.cat === 'divisas' ? 4 : 2)) : null,
+        loading: false,
+      };
+    });
+    
+    setAssets(updated);
+    const loadedCount = updated.filter(a => a.price != null).length;
+    const now = new Date();
+    setStatus({
+      state: loadedCount > 0 ? 'ok' : 'error',
+      text: loadedCount > 0 ? `✓ ${loadedCount}/${ALL_ASSETS.length} activos cargados` : '⚠️ No se recibieron precios (quizá los símbolos no existen)',
+      time: now.toLocaleTimeString('es-DO'),
+    });
+    setProgress(100);
+    setTimeout(() => setProgress(0), 1000);
+  }, []);
+
+  // Auto-refresh cada 5 minutos
+  useEffect(() => {
+    if (autoRefresh) {
+      refreshData();
+      intervalRef.current = setInterval(() => {
+        refreshData();
+        setCountdown(300);
+      }, 300000);
+      countdownRef.current = setInterval(() => {
+        setCountdown(prev => (prev > 0 ? prev - 1 : 300));
+      }, 1000);
+    } else {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    };
+  }, [autoRefresh, refreshData]);
+
+  const handleManualRefresh = () => {
+    if (status.state === 'loading') return;
+    refreshData();
+    if (autoRefresh) setCountdown(300);
+  };
+
+  // Exportar JPG/PDF (igual que antes, pero con la función buildPrintableHTML)
+  const buildPrintableHTML = () => {
+    const loaded = assets.filter(a => a.price != null);
+    if (!loaded.length) return null;
+    const cats = [
+      { key:'acciones', label:'Acciones', icon:'📈' },
+      { key:'indices',  label:'Índices',  icon:'📊' },
+      { key:'divisas',  label:'Divisas',  icon:'💱' },
+      { key:'materias', label:'Materias Primas', icon:'🪙' },
+    ];
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('es-DO', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+    const timeStr = now.toLocaleTimeString('es-DO');
+    let sections = '';
+    cats.forEach(({ key, label, icon }) => {
+      const group = loaded.filter(a => a.cat === key);
+      if (!group.length) return;
+      sections += `
+        <div class="pr-section-title">${icon} ${label}</div>
+        <table class="pr-table">
+          <thead><tr><th style="width:22%">Activo</th><th style="width:15%">Precio</th><th style="width:12%">Cambio</th><th style="width:20%">Take Profit</th><th style="width:31%">Señal</th></td></thead>
+          <tbody>
+            ${group.map(a => {
+              const chg = a.change != null ? (a.change >=0 ? '+' : '') + a.change.toFixed(2) + '%' : '—';
+              const chgColor = a.change > 0.05 ? '#1a7a4a' : a.change < -0.05 ? '#c0222a' : '#777';
+              const tp = a.tp ? fmtPrice(a.tp, a.cat) : '—';
+              const sigCls = ({ 'COMPRA FUERTE':'pr-cf','COMPRA':'pr-c','NEUTRAL':'pr-n','VENTA':'pr-v','VENTA FUERTE':'pr-vf' }[a.signal] || 'pr-n');
+              const iconSig = ({ 'COMPRA FUERTE':'▲▲','COMPRA':'▲','NEUTRAL':'→','VENTA':'▼','VENTA FUERTE':'▼▼' }[a.signal] || '→');
+              return `<tr>
+                <td style="font-weight:700">${a.name}</td>
+                <td style="font-family:monospace">${fmtPrice(a.price, a.cat)}</td>
+                <td style="font-family:monospace;color:${chgColor};font-weight:700">${chg}</td>
+                <td style="font-family:monospace">${tp}</td>
+                <td style="text-align:center"><span class="pr-sig ${sigCls}">${iconSig} ${a.signal || '—'}</span></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>`;
+    });
+    return `
+      <div class="pr-header"><div class="pr-logo"><svg width="36" viewBox="0 0 36 36"><circle cx="18" cy="18" r="17" fill="#0d1f3c" stroke="#1a6bff"/><text x="18" y="24" text-anchor="middle" font-weight="800" font-size="8" fill="white">MDM</text></svg></div><div class="pr-brand"><h1>MONEDA DEL MUNDO</h1><p>Señales Profesionales de Trading</p><div>www.monedadelmundo.com | info@monedadelmundo.com</div></div></div>
+      <div class="pr-titlebar"><h2>📋 Análisis Diario del Mercado</h2><p>${dateStr} · Tendencia vigente próximas 5 horas</p></div>
+      <div class="pr-body">${sections}</div>
+      <div class="pr-footer"><div>Datos: Yahoo Finance</div><div>Generado: ${dateStr}, ${timeStr}</div></div>
+    `;
+  };
+
+  const exportJPG = async () => {
+    const html = buildPrintableHTML();
+    if (!html) { alert('No hay datos para exportar. Actualiza primero.'); return; }
+    const el = document.getElementById('printable-report');
+    el.innerHTML = html;
+    setExporting('jpg');
+    await new Promise(r => setTimeout(r, 300));
+    try {
+      const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#fff', width: 800 });
+      const link = document.createElement('a');
+      const now = new Date();
+      link.download = `senales-${now.getFullYear()}${now.getMonth()+1}${now.getDate()}.jpg`;
+      link.href = canvas.toDataURL('image/jpeg', 0.95);
+      link.click();
+    } catch(e) { alert('Error al generar JPG: ' + e.message); }
+    setExporting('');
+    el.innerHTML = '';
+  };
+  const exportPDF = async () => {
+    const html = buildPrintableHTML();
+    if (!html) { alert('No hay datos para exportar.'); return; }
+    const el = document.getElementById('printable-report');
+    el.innerHTML = html;
+    setExporting('pdf');
+    await new Promise(r => setTimeout(r, 300));
+    try {
+      const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#fff', width: 800 });
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [canvas.width/2, canvas.height/2] });
+      pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width/2, canvas.height/2);
+      const now = new Date();
+      pdf.save(`senales-${now.getFullYear()}${now.getMonth()+1}${now.getDate()}.pdf`);
+    } catch(e) { alert('Error al generar PDF: ' + e.message); }
+    setExporting('');
+    el.innerHTML = '';
+  };
+
+  // Filtros y agrupación
+  const filtered = assets.filter(a => filterCat === 'all' || a.cat === filterCat);
+  const grouped = filterCat === 'all'
+    ? ['acciones','indices','divisas','materias'].reduce((acc, cat) => {
+        const g = filtered.filter(a => a.cat === cat);
+        if (g.length) acc.push({ cat, label: catLabel[cat], items: g });
+        return acc;
+      }, [])
+    : [{ cat: filterCat, label: catLabel[filterCat], items: filtered }];
+
+  const loaded = assets.filter(a => a.price != null);
+  const counts = loaded.reduce((acc, a) => {
+    if (!a.signal) return acc;
+    if (a.signal.includes('COMPRA')) acc.compra++;
+    else if (a.signal.includes('VENTA')) acc.venta++;
+    else acc.neutral++;
+    return acc;
+  }, { compra: 0, venta: 0, neutral: 0 });
+
+  const minutes = Math.floor(countdown / 60);
+  const seconds = countdown % 60;
+
+  return (
+    <>
+      <nav className="topbar">
+        <div className="topbar-brand"><div className="topbar-logo">MDM</div><div><div className="topbar-name">MONEDA DEL MUNDO</div><div className="topbar-sub">Señales Profesionales de Trading</div></div></div>
+        <div className="topbar-actions">
+          <button className="btn btn-ghost" onClick={exportJPG} disabled={!!exporting || loaded.length === 0}>{exporting==='jpg'?'⏳ Generando…':'🖼 JPG'}</button>
+          <button className="btn btn-ghost" onClick={exportPDF} disabled={!!exporting || loaded.length === 0}>{exporting==='pdf'?'⏳ Generando…':'📄 PDF'}</button>
+          <button className={`btn ${autoRefresh ? 'btn-auto on' : 'btn-auto'}`} onClick={() => setAutoRefresh(!autoRefresh)}>
+            {autoRefresh ? '🔄 Auto ON' : '⏹️ Auto OFF'}
+          </button>
+          <button className="btn btn-primary" onClick={handleManualRefresh} disabled={status.state === 'loading'}>
+            {status.state === 'loading' ? `⏳ ${progress}%` : '⟳ Actualizar'}
+          </button>
+        </div>
+      </nav>
+      <main className="main">
+        {progress > 0 && <div className="progress"><div className="progress-fill" style={{width: progress+'%'}}/></div>}
+        <div className="status-bar">
+          <div className="status-left"><div className={`status-dot ${status.state}`}/><span className="status-text">{status.text}</span></div>
+          <div style={{display:'flex', gap:'16px', alignItems:'center'}}>
+            {autoRefresh && <span className="auto-badge">⏲ Próxima actualización en {minutes}:{seconds.toString().padStart(2,'0')}</span>}
+            {status.time && <span className="status-time">🕐 {status.time}</span>}
+          </div>
+        </div>
+        <div className="summary-row">
+          <div className="summary-card"><div className="summary-label">Cargados</div><div className="summary-val">{loaded.length}<span style={{fontSize:14,color:'var(--text3)'}}>/{ALL_ASSETS.length}</span></div></div>
+          <div className="summary-card"><div className="summary-label">Compra</div><div className="summary-val green">{counts.compra}</div></div>
+          <div className="summary-card"><div className="summary-label">Neutral</div><div className="summary-val amber">{counts.neutral}</div></div>
+          <div className="summary-card"><div className="summary-label">Venta</div><div className="summary-val red">{counts.venta}</div></div>
+        </div>
+        <div className="filters">
+          {['all','acciones','indices','divisas','materias'].map(k => (
+            <button key={k} className={`filter-btn ${filterCat===k?'active':''}`} onClick={() => setFilterCat(k)}>
+              {k==='all'?'Todos':k==='acciones'?'Acciones':k==='indices'?'Índices':k==='divisas'?'Divisas':'Materias'}
+            </button>
+          ))}
+        </div>
+        {grouped.map(({ cat, label, items }) => (
+          <div className="tbl-wrap" key={cat}>
+            <div className="section-heading">{label}</div>
+            <table>
+              <thead><tr><th style={{width:'20%'}}>Activo</th><th style={{width:'10%'}}>Ticker</th><th style={{width:'15%'}}>Precio</th><th style={{width:'12%'}}>Cambio 1d</th><th style={{width:'22%'}}>Señal</th><th style={{width:'15%'}}>Take Profit</th><th style={{width:'6%'}}>Stop Loss</th></tr></thead>
+              <tbody>
+                {items.map(a => {
+                  const chgTxt = a.change != null ? (a.change>=0?'+':'')+a.change.toFixed(2)+'%' : '—';
+                  const chgCls = a.change > 0.05 ? 'chg-up' : a.change < -0.05 ? 'chg-dn' : 'chg-fl';
+                  const sl = a.tp && a.price ? fmtPrice(
+                    a.signal?.includes('COMPRA') ? a.price * (1 - (a.cat==='divisas'?0.002:a.cat==='materias'?0.004:0.008)) : a.price * (1 + (a.cat==='divisas'?0.002:a.cat==='materias'?0.004:0.008)),
+                    a.cat
+                  ) : '—';
+                  return (
+                    <tr key={a.sym}>
+                      <td><div className="asset-name">{a.name}</div></td>
+                      <td><span className="asset-sym">{a.sym}</span></td>
+                      <td>{a.loading ? <div className="skel" style={{width:70}}/> : <span className="price-val">{fmtPrice(a.price, a.cat)}</span>}</td>
+                      <td>{a.loading ? <div className="skel" style={{width:50}}/> : <span className={`change-val ${chgCls}`}>{chgTxt}</span>}</td>
+                      <td>{a.loading ? <div className="skel" style={{width:90}}/> : <SigBadge sig={a.signal}/>}</td>
+                      <td className="tp-val">{a.loading ? <div className="skel" style={{width:65}}/> : fmtPrice(a.tp, a.cat)}</td>
+                      <td className="tp-val" style={{color:'var(--red)'}}>{a.loading ? <div className="skel" style={{width:65}}/> : sl}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ))}
+        <div style={{fontSize:12,color:'var(--text3)',marginTop:'0.5rem',lineHeight:1.6}}>
+          Señales por variación diaria. Vigencia estimada: 5h. Fuente: Yahoo Finance (puede tener retraso). Stop Loss/Take Profit indicativos.
+        </div>
+      </main>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
